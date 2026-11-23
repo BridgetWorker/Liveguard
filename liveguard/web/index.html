@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Liveguard</title>
+<style>
+:root{
+  --dusk:#1D2633; --raised:#253041; --well:#19212C; --line:#35435A; --line-soft:#2C3849;
+  --paper:#ECE6DA; --muted:#98A2B1; --faint:#6E7A8C;
+  --sodium:#F4A63A; --sodium-dim:#7A5A2C; --sodium-glow:rgba(244,166,58,.28);
+  --calm:#89B79D; --alarm:#E8634F;
+  --r-lg:14px; --r-sm:7px;
+  --font:"Avenir Next","Avenir","Segoe UI Variable Text","Seravek","Gill Sans Nova","Ubuntu","Cantarell",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--dusk);color:var(--paper);font-family:var(--font);font-size:15px;line-height:1.5;
+  -webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--sodium);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+
+/* ---------- frame ---------- */
+.shell{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+aside{background:var(--well);border-right:1px solid var(--line-soft);padding:28px 22px;display:flex;flex-direction:column;gap:28px;
+  position:sticky;top:0;height:100vh}
+main{padding:28px clamp(18px,4vw,48px) 80px;max-width:1100px;width:100%}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand h1{margin:0;font-size:22px;font-weight:600;letter-spacing:-.01em}
+.mode{font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid var(--sodium-dim);color:var(--sodium)}
+.mode.live{border-color:var(--line);color:var(--muted)}
+
+/* ---------- the ladder: the one loud thing ---------- */
+.ladder{display:flex;flex-direction:column-reverse;gap:6px}
+.rung{display:grid;grid-template-columns:12px 1fr;align-items:center;gap:12px;padding:7px 0;color:var(--faint);font-size:14px;
+  transition:color .25s}
+.lamp{width:12px;height:12px;border-radius:50%;background:var(--line);transition:background .25s,box-shadow .25s}
+.rung.lit{color:var(--muted)} .rung.lit .lamp{background:var(--sodium-dim)}
+.rung.top{color:var(--paper);font-weight:600} .rung.top .lamp{background:var(--sodium);box-shadow:0 0 0 5px var(--sodium-glow),0 0 22px var(--sodium)}
+.rung.top.danger .lamp{background:var(--alarm);box-shadow:0 0 0 5px rgba(232,99,79,.25),0 0 22px var(--alarm)}
+.rung.calm.top .lamp{background:var(--calm);box-shadow:0 0 0 5px rgba(137,183,157,.2)}
+.ladder-caption{font-size:13px;color:var(--muted);margin:0 0 10px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+.conditions{display:flex;flex-direction:column;gap:8px;font-size:14px;color:var(--muted)}
+.conditions b{color:var(--paper);font-weight:500}
+
+/* ---------- nav ---------- */
+nav{display:flex;gap:26px;border-bottom:1px solid var(--line-soft);margin-bottom:28px}
+nav button{background:none;border:0;padding:0 0 12px;color:var(--muted);cursor:pointer;font-size:16px;border-bottom:2px solid transparent;margin-bottom:-1px}
+nav button[aria-selected=true]{color:var(--paper);border-color:var(--sodium)}
+nav button:hover{color:var(--paper)}
+section[hidden]{display:none}
+
+h2{font-size:18px;font-weight:600;margin:0 0 4px;letter-spacing:-.005em}
+.lede{color:var(--muted);margin:0 0 18px;max-width:62ch}
+
+/* ---------- live ---------- */
+.people{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-bottom:36px}
+.person{background:var(--raised);border-radius:var(--r-lg);padding:16px 18px;border-left:4px solid var(--line)}
+.person.l2,.person.l3{border-left-color:var(--sodium-dim)} .person.l4,.person.l5{border-left-color:var(--sodium)}
+.person.l6{border-left-color:var(--alarm)} .person.l0{border-left-color:var(--calm)}
+.person header{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.person .where{font-weight:600}
+.person .doing{color:var(--sodium);font-size:14px}
+.person.l0 .doing,.person.l1 .doing{color:var(--muted)}
+.why{margin:10px 0 0;padding:0;list-style:none;font-size:13.5px;color:var(--muted)}
+.why li{padding:2px 0}
+.empty{color:var(--muted);padding:26px;border:1px dashed var(--line);border-radius:var(--r-lg);margin-bottom:36px}
+
+.log{list-style:none;margin:0;padding:0}
+.log li{display:grid;grid-template-columns:96px 1fr;gap:14px;padding:11px 0;border-top:1px solid var(--line-soft)}
+.log time{color:var(--faint);font-size:13px;padding-top:2px;white-space:nowrap}
+.log .what{font-weight:500}
+.log .detail{color:var(--muted);font-size:13.5px}
+.log .said{margin:6px 0 0;font-style:italic;color:var(--paper);padding-left:12px;border-left:2px solid var(--sodium)}
+.log .no{color:var(--calm)} .log .yes{color:var(--sodium)}
+.log .fb{display:flex;gap:8px;margin-top:6px}
+
+/* ---------- controls ---------- */
+.btn{border:1px solid var(--line);background:var(--raised);border-radius:var(--r-sm);padding:7px 14px;cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.btn.go{background:var(--sodium);border-color:var(--sodium);color:#24180A;font-weight:600}
+.btn.go:hover{filter:brightness(1.07)}
+.btn.small{padding:3px 10px;font-size:13px}
+.btn.quiet{background:none}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden}
+.seg button{border:0;background:none;padding:6px 12px;cursor:pointer;color:var(--muted)}
+.seg button[aria-pressed=true]{background:var(--raised);color:var(--paper)}
+.seg button+button{border-left:1px solid var(--line)}
+
+.bench{display:grid;grid-template-columns:1.1fr 1fr;gap:36px}
+@media (max-width:900px){.bench{grid-template-columns:1fr}}
+.scenes{list-style:none;margin:0 0 30px;padding:0}
+.scenes li{display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;padding:13px 0;border-top:1px solid var(--line-soft)}
+.scenes .name{font-weight:500}
+.scenes .blurb{color:var(--muted);font-size:13.5px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0}
+.row > label:first-child{min-width:120px;color:var(--muted)}
+.card{background:var(--raised);border-radius:var(--r-lg);padding:18px 20px;margin-bottom:22px}
+.card h3{margin:0 0 6px;font-size:16px;font-weight:600}
+.hint{font-size:13px;color:var(--muted);margin:4px 0 0}
+
+input[type=text],input[type=number],input[type=password],select,textarea{
+  background:var(--well);border:1px solid var(--line);border-radius:var(--r-sm);padding:7px 10px;min-width:0}
+input[type=number]{width:110px}
+textarea{width:100%;min-height:70px;resize:vertical}
+input:focus,select:focus,textarea:focus{border-color:var(--sodium);outline:none}
+.toggle{display:inline-flex;align-items:center;gap:8px;cursor:pointer;color:var(--paper)}
+.toggle input{accent-color:var(--sodium);width:16px;height:16px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:99px;background:var(--well);border:1px solid var(--line);font-size:13.5px}
+.chip button{border:0;background:none;padding:0;color:var(--faint);cursor:pointer;font-size:15px;line-height:1}
+.chip button:hover{color:var(--alarm)}
+.chip.pick{cursor:pointer;user-select:none}
+.chip.pick[aria-pressed=true]{border-color:var(--sodium);color:var(--sodium)}
+.chip-input{border:1px dashed var(--line)!important;background:none!important;width:150px}
+
+/* ---------- settings ---------- */
+.settings{display:grid;grid-template-columns:200px 1fr;gap:36px}
+@media (max-width:900px){.settings{grid-template-columns:1fr}.settings .toc{display:none}}
+.toc{position:sticky;top:28px;align-self:start;display:flex;flex-direction:column;gap:4px}
+.toc a{color:var(--muted);text-decoration:none;padding:4px 0;font-size:14px}
+.toc a:hover{color:var(--paper)}
+fieldset{border:0;padding:0;margin:0 0 34px}
+legend{font-size:17px;font-weight:600;margin-bottom:4px;padding:0}
+.field{display:grid;grid-template-columns:210px 1fr;gap:6px 18px;padding:12px 0;border-top:1px solid var(--line-soft)}
+@media (max-width:640px){.field{grid-template-columns:1fr}}
+.field > label{padding-top:7px}
+.field .help{font-size:13px;color:var(--muted);margin-top:4px}
+.field input[type=text],.field input[type=password]{width:100%;max-width:440px}
+.maprows{display:flex;flex-direction:column;gap:6px}
+.maprow{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;max-width:560px}
+.cam{background:var(--well);border:1px solid var(--line-soft);border-radius:var(--r-sm);padding:12px;margin-bottom:8px;display:grid;gap:8px}
+.cam .camhead{display:flex;gap:8px;align-items:center}
+.cam .camhead input{flex:1}
+.savebar{position:fixed;left:260px;right:0;bottom:0;background:rgba(25,33,44,.96);border-top:1px solid var(--line-soft);
+  padding:12px clamp(18px,4vw,48px);display:flex;gap:12px;align-items:center;transform:translateY(100%);transition:transform .2s}
+.savebar.show{transform:none}
+@media (max-width:820px){.savebar{left:0}}
+.savebar .msg{color:var(--muted);flex:1}
+.savebar .msg.err{color:var(--alarm)}
+.yaml{font-family:ui-monospace,"SF Mono","Cascadia Code",Menlo,monospace;font-size:13px;min-height:60vh;line-height:1.55;tab-size:2}
+
+/* ---------- small screens ---------- */
+@media (max-width:820px){
+  .shell{grid-template-columns:1fr}
+  aside{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:flex-start;gap:20px}
+  .ladder-wrap{order:3;width:100%}
+  .ladder{flex-direction:row;gap:0;justify-content:space-between;position:relative}
+  .rung{grid-template-columns:12px;justify-items:center;font-size:0;padding:4px 0}
+  .rung.top{font-size:13px;grid-template-columns:12px auto;justify-items:start}
+  .log li{grid-template-columns:1fr;gap:2px}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside>
+    <div class="brand"><h1>Liveguard</h1><span class="mode" id="mode">…</span></div>
+
+    <div class="ladder-wrap">
+      <p class="ladder-caption" id="ladderCaption">Nobody on camera.</p>
+      <div class="ladder" id="ladder" aria-label="Response level"></div>
+    </div>
+
+    <div class="conditions" id="conditions"></div>
+  </aside>
+
+  <main>
+    <nav role="tablist">
+      <button role="tab" aria-selected="true" data-tab="live">Live</button>
+      <button role="tab" aria-selected="false" data-tab="bench" id="benchTab">Test bench</button>
+      <button role="tab" aria-selected="false" data-tab="settings">Settings</button>
+    </nav>
+
+    <!-- LIVE -->
+    <section id="live">
+      <h2>On camera now</h2>
+      <p class="lede">Who Liveguard is watching, how far up the ladder it's gone, and why.</p>
+      <div id="people"></div>
+      <h2>Logbook</h2>
+      <p class="lede">Everything it noticed, decided and said, newest first.</p>
+      <ul class="log" id="log"></ul>
+    </section>
+
+    <!-- TEST BENCH -->
+    <section id="bench" hidden>
+      <div id="benchOff" class="empty" hidden>
+        The test bench runs scenes against your real zones and rules without touching cameras or Home Assistant.
+        Start Liveguard with <code>--test</code> to use it.
+      </div>
+      <div class="bench" id="benchOn">
+        <div>
+          <h2>Scenes</h2>
+          <p class="lede">Each one walks a pretend person through your zones. Watch the ladder and the logbook.</p>
+          <ul class="scenes" id="scenes"></ul>
+
+          <div class="card">
+            <h3>Move a person yourself</h3>
+            <p class="hint">Send updates one at a time. Each press is one Frigate update for the same person.</p>
+            <div class="row"><label for="mCam">Camera</label><select id="mCam"></select></div>
+            <div class="row"><label>Standing in</label><div class="chips" id="mZones"></div></div>
+            <div class="row"><label for="mFace">Face match</label>
+              <select id="mFace"><option value="">Nobody recognised</option></select>
+              <input type="number" id="mScore" min="0" max="1" step="0.05" value="0.9" aria-label="Match confidence">
+            </div>
+            <div class="row" style="align-items:flex-start"><label for="mDesc">What they look like</label>
+              <textarea id="mDesc" placeholder="A man wearing a gray hoodie, walking up the driveway."></textarea></div>
+            <div class="row"><label></label>
+              <label class="toggle"><input type="checkbox" id="mStill"> Standing still</label>
+              <label class="toggle"><input type="checkbox" id="mPkg"> Package nearby</label>
+            </div>
+            <div class="row"><label></label>
+              <button class="btn go" id="mSend">Send update</button>
+              <button class="btn" id="mLeave">Person leaves</button>
+              <button class="btn quiet" id="mNew">New person</button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h2>Conditions</h2>
+          <p class="lede">Change the world the scene happens in.</p>
+          <div class="card">
+            <div class="row"><label>Time of day</label>
+              <div class="seg" id="segNight">
+                <button data-v="null">Real clock</button><button data-v="false">Day</button><button data-v="true">Night</button>
+              </div></div>
+            <div class="row"><label for="cArmed">Alarm</label>
+              <label class="toggle"><input type="checkbox" id="cArmed"> Armed</label></div>
+            <div class="row"><label for="cWho">Phone joins Wi-Fi</label>
+              <select id="cWho"></select><button class="btn small" id="cJoin">Join now</button></div>
+            <div class="row"><label for="cBell">Doorbell</label>
+              <select id="cBell"></select><button class="btn small" id="cRing">Ring</button></div>
+          </div>
+          <div class="card">
+            <h3>Talking through your computer</h3>
+            <p class="hint">In test mode, spoken warnings play on this computer's speakers, and a live talk-down uses your mic as the camera mic.
+              Use headphones: Liveguard mutes the mic while it's talking, so speakers can cut you off.</p>
+            <p class="hint" id="voiceInfo"></p>
+          </div>
+          <button class="btn" id="stopAll">Stop all scenes</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="settings" hidden>
+      <div class="row" style="justify-content:space-between;margin-top:0">
+        <div><h2>Settings</h2><p class="lede" id="cfgPath" style="margin:0"></p></div>
+        <div class="seg" id="segView"><button data-v="form" aria-pressed="true">Form</button><button data-v="yaml">YAML</button></div>
+      </div>
+      <div class="settings" id="formView">
+        <div class="toc" id="toc"></div>
+        <form id="cfgForm" autocomplete="off"></form>
+      </div>
+      <div id="yamlView" hidden>
+        <p class="hint">Edit the file directly. Saving from either view rewrites the file and drops comments. A copy of the previous version is kept as <code>.bak</code>.</p>
+        <textarea class="yaml" id="yamlText" spellcheck="false"></textarea>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="savebar" id="savebar">
+  <span class="msg" id="saveMsg">You have unsaved changes.</span>
+  <button class="btn quiet" id="revert">Discard</button>
+  <button class="btn go" id="save">Save settings</button>
+  <button class="btn" id="restart" hidden>Restart now</button>
+</div>
+
+<script>
+"use strict";
+const $ = (s, el=document) => el.querySelector(s);
+const h = (tag, attrs={}, ...kids) => {
+  const el = document.createElement(tag);
+  for (const [k,v] of Object.entries(attrs)) {
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (v === true) el.setAttribute(k, "");
+    else if (v !== false && v != null) el.setAttribute(k, v);
+  }
+  for (const k of kids.flat()) if (k != null && k !== false) el.append(k.nodeType ? k : document.createTextNode(k));
+  return el;
+};
+const api = async (path, body, method) => {
+  const r = await fetch(path, body === undefined ? {} :
+    {method: method || "POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
+  const j = await r.json().catch(() => ({ok:false, error:`HTTP ${r.status}`}));
+  if (!r.ok && j.ok === undefined) j.ok = false;
+  return j;
+};
+const clock = ts => new Date(ts*1000).toLocaleTimeString([], {hour:"numeric", minute:"2-digit", second:"2-digit"});
+
+/* ---------------- ladder ---------------- */
+const RUNGS = [
+  ["SILENT","Stay quiet"],["NOTIFY","Tell you"],["LIGHTS","Lights on"],["WARN","Spoken warning"],
+  ["OPERATOR","Live talk-down"],["SIREN","Siren"],["ESCALATE_HUMAN","Page you urgently"]];
+RUNGS.forEach(([id,label],i) => $("#ladder").append(
+  h("div",{class:"rung", "data-i":i}, h("span",{class:"lamp"}), label)));
+
+let state = null;
+function paintLadder() {
+  const top = state.tracks.length ? Math.max(...state.tracks.map(t => t.rung)) : -1;
+  document.querySelectorAll(".rung").forEach(r => {
+    const i = +r.dataset.i;
+    r.className = "rung" + (i < top ? " lit" : "") + (i === top ? " top" : "") +
+      (i === top && i >= 5 ? " danger" : "") + (i === 0 ? " calm" : "");
+  });
+  const n = state.tracks.length;
+  $("#ladderCaption").textContent = n === 0 ? "Nobody on camera." :
+    n === 1 ? "One person on camera." : `${n} people on camera. Showing the highest level.`;
+}
+
+function paintConditions() {
+  const c = $("#conditions"); c.replaceChildren();
+  const night = state.night ? "Night" : "Day";
+  const forced = state.night_override === null ? "" : " (test)";
+  c.append(h("div",{}, "It's ", h("b",{}, night + forced)));
+  c.append(h("div",{}, "Alarm ", h("b",{}, state.armed ? "armed" : "disarmed")));
+  c.append(h("div",{}, "Phones home: ", h("b",{}, state.phones_home.length ? state.phones_home.join(", ") : "none")));
+  c.append(h("div",{}, "Deciding with ", h("b",{}, state.deliberator === "OllamaDeliberator" ? "vision model" : "rules")));
+}
+
+/* ---------------- live ---------------- */
+const LEVEL_WORDS = {SILENT:"Staying quiet",NOTIFY:"Told you",LIGHTS:"Lights on",WARN:"Gave a warning",
+  OPERATOR:"Talking to them",SIREN:"Siren on",ESCALATE_HUMAN:"Paged you"};
+const INTENT_WORDS = {unknown:"Approaching",delivery:"Delivery",visitor:"Visitor",passerby:"Passing by",
+  loitering:"Hanging around",suspicious:"Suspicious"};
+const QUIET_REASON = /^(escalated to|de-escalated|thinking before speaking$)/i;
+const REWORD = {"no matching signals":"Not recognised by face or phone"};
+function humanReasons(list, intent) {
+  const seen = new Set(), out = [];
+  for (let r of list || []) {
+    if (!r || QUIET_REASON.test(r) || r === intent || r === "fallback") continue;
+    r = REWORD[r.toLowerCase()] || r;
+    r = r.replace(/^chose to speak: /i, "Decided to speak: ").replace(/^decided not to speak: /i, "Decided to stay quiet: ");
+    const k = r.toLowerCase(); if (seen.has(k)) continue; seen.add(k); out.push(cap(r));
+  }
+  return out;
+}
+const areaOf = cam => (state.cameras.find(c => c.id === cam) || {}).area || cam.replaceAll("_"," ");
+const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+
+function paintPeople() {
+  const box = $("#people"); box.replaceChildren();
+  if (!state.tracks.length) {
+    box.append(h("div",{class:"empty"}, state.test_mode
+      ? "Nobody on camera. Play a scene from the test bench to see Liveguard work."
+      : "Nobody on camera."));
+    return;
+  }
+  const grid = h("div",{class:"people"});
+  for (const t of state.tracks) {
+    const who = t.identity ? `Maybe ${t.identity}` : "Unknown person";
+    grid.append(h("article",{class:`person l${t.rung}`},
+      h("header",{}, h("span",{class:"where"}, cap(areaOf(t.camera))), h("span",{class:"doing"}, LEVEL_WORDS[t.level])),
+      h("div",{class:"detail"}, `${INTENT_WORDS[t.intent] || t.intent}. ${who}, trust `, h("span",{class:"num"}, Math.round(t.trust*100)+"%"), "."),
+      h("ul",{class:"why"}, humanReasons([...t.reasons, ...t.trust_reasons], t.intent).slice(0,5).map(r => h("li",{}, r)))));
+  }
+  box.append(grid);
+}
+
+const ACTION_WORDS = {notify:"Sent you a notification", lights:"Turned the lights on", warn:"Spoke a warning",
+  operator_start:"Started a live talk-down", operator_stop:"Ended the talk-down", siren:"Sounded the siren",
+  page:"Paged you urgently", deliberate:"Stopped to think before speaking"};
+let lastSeq = 0;
+function logRow(e) {
+  let what, detail = null, extra = null;
+  const where = e.camera ? cap(areaOf(e.camera)) : null;
+  switch (e.kind) {
+    case "seen": what = e.text; detail = INTENT_WORDS[e.intent]; break;
+    case "action":
+      what = ACTION_WORDS[e.action] || e.action;
+      detail = [where, humanReasons(e.reasons, e.intent).slice(-1)[0]].filter(Boolean).join(": ");
+      if (e.action === "notify" && e.camera) extra = h("div",{class:"fb"},
+        h("button",{class:"btn small", onclick:ev => sendFeedback(e.camera,true,ev)},"This was fine"),
+        h("button",{class:"btn small", onclick:ev => sendFeedback(e.camera,false,ev)},"Sketchy"));
+      break;
+    case "verdict":
+      what = h("span",{class: e.speak ? "yes" : "no"}, e.speak ? "Decided to speak" : "Decided to stay quiet");
+      detail = `${cap(e.text)}${e.source && e.source !== "rules" ? ` (${e.source})` : ""}`; break;
+    case "speak": what = `Said ${where ? where.toLowerCase() : ""}`.trim(); extra = h("blockquote",{class:"said"}, e.text); break;
+    case "ha": what = "Home Assistant (test, not sent)"; detail = e.text; break;
+    case "ended": what = "Left the camera"; detail = where; break;
+    default: what = e.text || e.kind; detail = where;
+  }
+  return h("li",{}, h("time",{class:"num"}, clock(e.ts)),
+    h("div",{}, h("div",{class:"what"}, what), detail ? h("div",{class:"detail"}, detail) : null, extra));
+}
+async function sendFeedback(camera, fine, ev) {
+  const r = await api("/api/feedback", {camera, fine});
+  if (r.ok) ev.target.parentElement.replaceChildren(h("span",{class:"detail"}, fine ? "Thanks. Marked fine." : "Thanks. Marked sketchy."));
+}
+async function pollEvents() {
+  const r = await api(`/api/events?since=${lastSeq}`);
+  if (!r.events) return;
+  const log = $("#log");
+  for (const e of r.events) log.prepend(logRow(e));
+  while (log.children.length > 300) log.lastChild.remove();
+  lastSeq = r.last;
+  if (!log.children.length) log.append(h("li",{}, h("span"), h("div",{class:"detail"}, "Nothing yet.")));
+  else log.querySelectorAll("li:not(:has(time))").forEach(x => x.remove());
+}
+async function pollState() {
+  state = await api("/api/state");
+  paintLadder(); paintConditions(); paintPeople();
+  if (!benchBuilt) buildBench();
+  syncBench();
+}
+
+/* ---------------- test bench ---------------- */
+let benchBuilt = false, manualN = 1;
+function buildBench() {
+  benchBuilt = true;
+  $("#mode").textContent = state.test_mode ? "Test mode" : "Watching";
+  $("#mode").classList.toggle("live", !state.test_mode);
+  $("#benchOff").hidden = state.test_mode; $("#benchOn").hidden = !state.test_mode;
+  if (!state.test_mode) return;
+
+  const sc = $("#scenes");
+  for (const s of state.scenes) sc.append(h("li",{},
+    h("div",{}, h("div",{class:"name"}, s.name), h("div",{class:"blurb"}, s.blurb)),
+    h("button",{class:"btn go small", onclick: () => api("/api/sim/scene",{id:s.id})}, "Play")));
+
+  for (const sel of ["#mCam","#cBell"]) for (const c of state.cameras)
+    $(sel).append(h("option",{value:c.id}, cap(c.area)));
+  for (const f of state.family) {
+    $("#mFace").append(h("option",{value:f}, f));
+    $("#cWho").append(h("option",{value:f}, f));
+  }
+  const z = state.zones, all = [...new Set([...z.on_property, ...z.door, ...z.sensitive, "driveway", ...z.off_property])];
+  for (const name of all) $("#mZones").append(h("button",{class:"chip pick", type:"button", "aria-pressed":"false",
+    onclick: ev => ev.currentTarget.setAttribute("aria-pressed", ev.currentTarget.getAttribute("aria-pressed") !== "true")}, name));
+  $("#voiceInfo").textContent = state.operator === "GeminiLiveOperator"
+    ? "Live talk-down: Gemini Live." : "Live talk-down: repeated one-way lines (set operator.backend to gemini for a real conversation).";
+
+  $("#segNight").addEventListener("click", ev => {
+    const b = ev.target.closest("button"); if (!b) return;
+    api("/api/sim/presence",{night: JSON.parse(b.dataset.v)}).then(pollState);
+  });
+  $("#cArmed").addEventListener("change", ev => api("/api/sim/presence",{armed: ev.target.checked}).then(pollState));
+  $("#cJoin").addEventListener("click", () => api("/api/sim/presence",{wifi_join: $("#cWho").value}).then(pollState));
+  $("#cRing").addEventListener("click", () => api("/api/sim/presence",{doorbell: $("#cBell").value}));
+  $("#stopAll").addEventListener("click", () => api("/api/sim/stop",{}));
+  const manual = ended => api("/api/sim/observe", {
+    track:`manual-${manualN}`, camera:$("#mCam").value, ended,
+    zones:[...document.querySelectorAll("#mZones [aria-pressed=true]")].map(b => b.textContent),
+    description:$("#mDesc").value, stationary:$("#mStill").checked, package:$("#mPkg").checked,
+    sub_label:$("#mFace").value, sub_label_score:+$("#mScore").value});
+  $("#mSend").addEventListener("click", () => manual(false));
+  $("#mLeave").addEventListener("click", () => manual(true).then(() => manualN++));
+  $("#mNew").addEventListener("click", () => { manual(true); manualN++; });
+}
+function syncBench() {
+  if (!state.test_mode) return;
+  const v = String(state.night_override);
+  $("#segNight").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === v));
+  if (document.activeElement !== $("#cArmed")) $("#cArmed").checked = state.armed;
+}
+
+/* ---------------- settings ---------------- */
+const S = (path, label, type="text", extra={}) => ({path, label, type, ...extra});
+const SCHEMA = [
+  ["household","Household",[
+    S("household.family","Family","list",{help:"Names exactly as they appear in Frigate's face library."}),
+    S("household.trusted","Trusted visitors","list",{help:"Friends, sitters, the dog walker. Never confronted."}),
+    S("household.face_to_person","Face name to person","map",{help:"Links a Frigate face to the name your phone trackers use.", keys:"Face name", vals:"Person"}),
+    S("household.night_hours","Night runs from","hours")]],
+  ["zones","Property and zones",[
+    S("zones.on_property","Our property","list",{help:"Frigate zones that are yours. With one set, nobody outside it is spoken to or lit up."}),
+    S("zones.off_property","Not ours","list",{help:"Street, sidewalk, the neighbour's yard."}),
+    S("zones.door","Door","list"), S("zones.sensitive","Sensitive","list",{help:"Back yard, side yard, gates, by the cars. Suspicious at night."})]],
+  ["policy","How far it can go",[
+    S("policy.max_level","Highest response","select",{options:[["notify","Tell you"],["lights","Lights on"],["warn","Spoken warning"],["operator","Live talk-down"],["siren","Siren"],["escalate_human","Page you urgently"]],
+      help:"Keep this at spoken warning while you're testing."}),
+    S("policy.step_s","Seconds between steps","number"),
+    S("policy.operator_max_s","Talk-down before paging you","number",{help:"Seconds of live talk-down with no result before your phone gets an urgent alert."}),
+    S("policy.notify_deliveries","Tell me about deliveries","bool"),
+    S("policy.siren_requires_armed","Siren only when armed","bool")]],
+  ["intent","Behaviour timing",[
+    S("intent.delivery_max_s","A delivery takes at most","number",{help:"Seconds."}),
+    S("intent.loiter_s","Hanging around after","number",{help:"Seconds on the property without ringing."}),
+    S("intent.loiter_stationary_s","Standing still after","number",{help:"Seconds."})]],
+  ["deliberation","Thinking before speaking",[
+    S("deliberation.backend","Decide with","select",{options:[["ollama","Vision model (Ollama)"],["rules","Rules only"]]}),
+    S("deliberation.url","Ollama address"), S("deliberation.model","Model"),
+    S("deliberation.timeout_s","Wait for an answer","number",{help:"Seconds before giving up."}),
+    S("deliberation.on_timeout","If it doesn't answer","select",{options:[["hold","Stay quiet"],["rules","Fall back to rules"]]})]],
+  ["operator","Live talk-down",[
+    S("operator.backend","Talk-down with","select",{options:[["gemini","Gemini Live"],["speaker","One-way lines (offline)"],["log","Log only"]]}),
+    S("operator.api_key","Gemini API key","secret",{help:"Use a paid-tier key. On the free tier Google may use the audio and images to improve its products."}),
+    S("operator.model","Model"), S("operator.voice","Voice",undefined,{help:"Leave empty for Gemini's default."}),
+    S("operator.rtsp_url","Camera audio (RTSP)",undefined,{help:"go2rtc restream. {stream} becomes the camera's stream name."}),
+    S("operator.max_session_s","Longest session","number",{help:"Seconds. Hard cap for cost and safety."})]],
+  ["cameras","Cameras",[S("cameras","Cameras","cameras")]],
+  ["home_assistant","Home Assistant",[
+    S("home_assistant.url","Address"), S("home_assistant.token","Access token","secret"),
+    S("home_assistant.notify_service","Notify service",undefined,{help:"For example notify.mobile_app_your_phone."}),
+    S("home_assistant.entities.wifi_trackers","Wi-Fi trackers","map",{keys:"Entity", vals:"Person"}),
+    S("home_assistant.entities.ble_trackers","Bluetooth trackers","map",{keys:"Entity", vals:"Person"}),
+    S("home_assistant.entities.alarm_panel","Alarm panel"),
+    S("home_assistant.entities.interior_doors","Doors opened from inside","list"),
+    S("home_assistant.entities.doorbells","Doorbells","map",{keys:"Entity", vals:"Camera"})]],
+  ["frigate","Frigate and MQTT",[
+    S("frigate_url","Frigate address"), S("mqtt.host","MQTT host"), S("mqtt.port","MQTT port","number"),
+    S("mqtt.username","MQTT username"), S("mqtt.password","MQTT password","secret")]],
+  ["voice","Camera speaker",[
+    S("voice.go2rtc_url","go2rtc address"), S("voice.public_url","Liveguard address",undefined,{help:"How go2rtc reaches this machine to fetch audio."}),
+    S("voice.piper_model","Piper voice file"),
+    S("voice.codec","Camera audio format","select",{options:[["pcma","PCMA (most Dahua, Amcrest, Reolink)"],["pcmu","PCMU"],["opus","Opus"]]})]],
+  ["webui","This web page",[
+    S("webui.port","Port","number"), S("webui.password","Password","secret",{help:"Asked for by your browser. Any username works."})]],
+];
+
+let cfg = null, cfgOriginal = null, dirty = false;
+const getPath = (o, p) => p.split(".").reduce((a,k) => a == null ? undefined : a[k], o);
+function setPath(o, p, v) {
+  const ks = p.split("."); let cur = o;
+  for (const k of ks.slice(0,-1)) cur = (cur[k] && typeof cur[k] === "object") ? cur[k] : (cur[k] = {});
+  cur[ks.at(-1)] = v;
+}
+function markDirty() {
+  dirty = true; $("#savebar").classList.add("show");
+  $("#saveMsg").textContent = "You have unsaved changes."; $("#saveMsg").className = "msg";
+  $("#save").hidden = false; $("#revert").hidden = false; $("#restart").hidden = true;
+}
+
+function chipList(path) {
+  const wrap = h("div",{class:"chips"});
+  const draw = () => {
+    wrap.replaceChildren();
+    const arr = getPath(cfg, path) || [];
+    arr.forEach((v,i) => wrap.append(h("span",{class:"chip"}, String(v),
+      h("button",{type:"button","aria-label":`Remove ${v}`, onclick:() => {arr.splice(i,1); setPath(cfg,path,arr); markDirty(); draw();}}, "×"))));
+    const inp = h("input",{type:"text", class:"chip-input", placeholder:"Add, then Enter"});
+    inp.addEventListener("keydown", ev => {
+      if ((ev.key === "Enter" || ev.key === ",") && inp.value.trim()) {
+        ev.preventDefault(); const next = [...arr, inp.value.trim()]; setPath(cfg, path, next); markDirty(); draw();
+        wrap.querySelector("input").focus();
+      }
+    });
+    wrap.append(inp);
+  };
+  draw(); return wrap;
+}
+
+function mapEditor(path, f) {
+  const wrap = h("div",{class:"maprows"});
+  const draw = () => {
+    wrap.replaceChildren();
+    const obj = getPath(cfg, path) || {};
+    const entries = Object.entries(obj);
+    const commit = rows => { setPath(cfg, path, Object.fromEntries(rows.filter(([k]) => k))); markDirty(); };
+    entries.forEach(([k,v], i) => {
+      const kIn = h("input",{type:"text", value:k, "aria-label":f.keys || "Key"});
+      const vIn = h("input",{type:"text", value:v ?? "", "aria-label":f.vals || "Value"});
+      const sync = () => { const rows = entries.slice(); rows[i] = [kIn.value.trim(), vIn.value.trim()]; commit(rows); };
+      kIn.addEventListener("change", () => { sync(); draw(); }); vIn.addEventListener("input", sync);
+      wrap.append(h("div",{class:"maprow"}, kIn, vIn,
+        h("button",{type:"button", class:"btn small quiet", onclick:() => { commit(entries.filter((_,j) => j !== i)); draw(); }}, "Remove")));
+    });
+    wrap.append(h("div",{}, h("button",{type:"button", class:"btn small", onclick:() => {
+      const o = getPath(cfg, path) || {}; let n = 1; while (`new_${n}` in o) n++;
+      o[`new_${n}`] = ""; setPath(cfg, path, o); markDirty(); draw(); }}, `Add ${(f.keys || "entry").toLowerCase()}`)));
+  };
+  draw(); return wrap;
+}
+
+function camerasEditor() {
+  const wrap = h("div",{});
+  const draw = () => {
+    wrap.replaceChildren();
+    const cams = cfg.cameras || (cfg.cameras = {});
+    for (const [name, c] of Object.entries(cams)) {
+      const nameIn = h("input",{type:"text", value:name, "aria-label":"Frigate camera name"});
+      nameIn.addEventListener("change", () => {
+        const v = nameIn.value.trim(); if (!v || v === name || v in cams) { nameIn.value = name; return; }
+        cfg.cameras = Object.fromEntries(Object.entries(cams).map(([k,x]) => [k === name ? v : k, x])); markDirty(); draw();
+      });
+      const area = h("input",{type:"text", value:c.area || "", placeholder:"on the front porch"});
+      area.addEventListener("input", () => { c.area = area.value; markDirty(); });
+      c.lights = c.lights || []; c.sirens = c.sirens || [];
+      wrap.append(h("div",{class:"cam"},
+        h("div",{class:"camhead"}, nameIn, h("button",{type:"button", class:"btn small quiet",
+          onclick:() => { delete cams[name]; markDirty(); draw(); }}, "Remove camera")),
+        h("label",{}, h("span",{class:"help"}, "Spoken as \"you're on camera …\""), area),
+        h("div",{}, h("div",{class:"help"}, "Lights"), chipList(`cameras.${name}.lights`)),
+        h("div",{}, h("div",{class:"help"}, "Sirens"), chipList(`cameras.${name}.sirens`))));
+    }
+    wrap.append(h("button",{type:"button", class:"btn small", onclick:() => {
+      let n = 1; while (`camera_${n}` in cams) n++;
+      cams[`camera_${n}`] = {area:"", lights:[], sirens:[]}; markDirty(); draw(); }}, "Add camera"));
+  };
+  draw(); return wrap;
+}
+
+function fieldControl(f) {
+  const v = getPath(cfg, f.path);
+  const id = "f_" + f.path.replaceAll(".","_");
+  switch (f.type) {
+    case "list": return chipList(f.path);
+    case "map": return mapEditor(f.path, f);
+    case "cameras": return camerasEditor();
+    case "bool": {
+      const inp = h("input",{type:"checkbox", id}); inp.checked = !!v;
+      inp.addEventListener("change", () => { setPath(cfg, f.path, inp.checked); markDirty(); });
+      return h("label",{class:"toggle"}, inp, "On");
+    }
+    case "select": {
+      const sel = h("select",{id}, f.options.map(([val,label]) => h("option",{value:val}, label)));
+      sel.value = v ?? f.options[0][0];
+      sel.addEventListener("change", () => { setPath(cfg, f.path, sel.value); markDirty(); });
+      return sel;
+    }
+    case "number": {
+      const inp = h("input",{type:"number", id, value: v ?? ""});
+      inp.addEventListener("input", () => { setPath(cfg, f.path, inp.value === "" ? null : +inp.value); markDirty(); });
+      return inp;
+    }
+    case "hours": {
+      const [a,b] = Array.isArray(v) ? v : [22,6];
+      const s = h("input",{type:"number", min:0, max:23, value:a, "aria-label":"Night starts (hour)"});
+      const e = h("input",{type:"number", min:0, max:23, value:b, "aria-label":"Night ends (hour)"});
+      const sync = () => { setPath(cfg, f.path, [+s.value, +e.value]); markDirty(); };
+      s.addEventListener("input", sync); e.addEventListener("input", sync);
+      return h("div",{class:"row", style:"margin:0"}, s, h("span",{class:"help"}, "until"), e, h("span",{class:"help"}, "(24-hour clock)"));
+    }
+    case "secret": {
+      const inp = h("input",{type:"password", id, value: v ?? "", placeholder:"Not set"});
+      inp.addEventListener("input", () => { setPath(cfg, f.path, inp.value || null); markDirty(); });
+      return inp;
+    }
+    default: {
+      const inp = h("input",{type:"text", id, value: v ?? ""});
+      inp.addEventListener("input", () => { setPath(cfg, f.path, inp.value === "" ? null : inp.value); markDirty(); });
+      return inp;
+    }
+  }
+}
+
+function buildForm() {
+  const form = $("#cfgForm"), toc = $("#toc"); form.replaceChildren(); toc.replaceChildren();
+  for (const [key, title, fields] of SCHEMA) {
+    toc.append(h("a",{href:`#sec_${key}`}, title));
+    const fs = h("fieldset",{id:`sec_${key}`}, h("legend",{}, title));
+    for (const f of fields) {
+      const ctl = fieldControl(f);
+      if (f.type === "cameras") { fs.append(ctl); continue; }
+      fs.append(h("div",{class:"field"},
+        h("label",{for:"f_" + f.path.replaceAll(".","_")}, f.label),
+        h("div",{}, ctl, f.help ? h("div",{class:"help"}, f.help) : null)));
+    }
+    form.append(fs);
+  }
+}
+
+async function loadConfig() {
+  const r = await api("/api/config");
+  cfg = r.config; cfgOriginal = JSON.stringify(r.config);
+  $("#yamlText").value = r.yaml; $("#cfgPath").textContent = r.path ? `Saved to ${r.path}` : "";
+  dirty = false; $("#savebar").classList.remove("show");
+  buildForm();
+}
+
+let view = "form";
+$("#segView").addEventListener("click", ev => {
+  const b = ev.target.closest("button"); if (!b || b.dataset.v === view) return;
+  if (dirty && !confirm("Switching views discards unsaved changes. Continue?")) return;
+  view = b.dataset.v;
+  $("#segView").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  $("#formView").hidden = view !== "form"; $("#yamlView").hidden = view !== "yaml";
+  loadConfig();
+});
+$("#yamlText").addEventListener("input", markDirty);
+$("#revert").addEventListener("click", loadConfig);
+$("#save").addEventListener("click", async () => {
+  const body = view === "yaml" ? {yaml: $("#yamlText").value} : {config: cfg};
+  const r = await api("/api/config", body, "PUT");
+  if (!r.ok) { $("#saveMsg").textContent = r.error; $("#saveMsg").className = "msg err"; return; }
+  dirty = false;
+  $("#saveMsg").textContent = "Saved. Restart Liveguard to use the new settings."; $("#saveMsg").className = "msg";
+  $("#save").hidden = true; $("#revert").hidden = true; $("#restart").hidden = false;
+});
+$("#restart").addEventListener("click", async () => {
+  await api("/api/restart", {});
+  $("#saveMsg").textContent = "Restarting…"; $("#restart").hidden = true;
+  const wait = async () => { try { await api("/api/state"); location.reload(); } catch { setTimeout(wait, 800); } };
+  setTimeout(wait, 1500);
+});
+window.addEventListener("beforeunload", ev => { if (dirty) { ev.preventDefault(); ev.returnValue = ""; } });
+
+/* ---------------- tabs + boot ---------------- */
+document.querySelector("nav").addEventListener("click", ev => {
+  const b = ev.target.closest("button[data-tab]"); if (!b) return;
+  document.querySelectorAll("nav button").forEach(x => x.setAttribute("aria-selected", x === b));
+  for (const id of ["live","bench","settings"]) $("#" + id).hidden = id !== b.dataset.tab;
+  if (b.dataset.tab === "settings" && !cfg) loadConfig();
+  history.replaceState(null, "", "#" + b.dataset.tab);
+});
+const start = location.hash.slice(1);
+if (["bench","settings"].includes(start)) document.querySelector(`nav [data-tab=${start}]`).click();
+
+(async function loop() {
+  try { await pollState(); await pollEvents(); } catch (e) { /* server restarting */ }
+  setTimeout(loop, 1000);
+})();
+</script>
+</body>
+</html>

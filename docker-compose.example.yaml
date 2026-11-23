@@ -6,9 +6,11 @@ services:
       HA_TOKEN: ${HA_TOKEN}
       MQTT_PASSWORD: ${MQTT_PASSWORD}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      LIVEGUARD_PASSWORD: ${LIVEGUARD_PASSWORD}
     volumes:
       - ./config:/config        # liveguard.yaml
       - ./data:/data            # feedback history, TTS cache
       - ./models:/models        # Piper voice .onnx + .onnx.json
     ports:
       - "8099:8099"             # go2rtc fetches spoken audio from here
+      - "8080:8080"             # web UI

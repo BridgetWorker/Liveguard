@@ -85,3 +85,10 @@ voice:
   public_url: http://liveguard:8099   # must be reachable from go2rtc
   codec: pcma                         # match your camera's backchannel
   streams: {}                         # frigate camera -> go2rtc stream, if names differ
+
+webui:
+  port: 8080
+  password: ${LIVEGUARD_PASSWORD}   # HTTP basic auth (any username)
+
+desktop:                     # only used with --test
+  mic_input: null            # ffmpeg input args, e.g. "-f pulse -i default"

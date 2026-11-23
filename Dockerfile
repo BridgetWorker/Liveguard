@@ -6,5 +6,5 @@ COPY pyproject.toml ./
 COPY liveguard ./liveguard
 RUN pip install --no-cache-dir ".[voice,gemini]"
 VOLUME ["/config", "/data", "/models"]
-EXPOSE 8099
+EXPOSE 8099 8080
 ENTRYPOINT ["liveguard", "-c", "/config/liveguard.yaml"]

@@ -35,6 +35,8 @@ class Config:
     voice: dict
     deliberation: dict = field(default_factory=dict)
     operator: dict = field(default_factory=dict)
+    webui: dict = field(default_factory=dict)
+    desktop: dict = field(default_factory=dict)       # test mode audio overrides
     frigate_url: str | None = None        # snapshots for the deliberator
 
 
@@ -76,9 +78,15 @@ def load(path: str) -> Config:
         ),
         **{k: raw["intent"][k] for k in raw.get("intent", {})},
     )
+    levels = {lv.name.lower(): lv for lv in Level}
+    if "max_level" in p and str(p["max_level"]).lower() not in levels:
+        raise ValueError(f"policy.max_level must be one of: {', '.join(levels)}")
+    unknown = set(p) - set(PolicyConfig.__dataclass_fields__)
+    if unknown:
+        raise ValueError(f"unknown policy setting(s): {', '.join(sorted(unknown))}")
     policy = PolicyConfig(
         **{k: v for k, v in p.items() if k != "max_level"},
-        **({"max_level": Level[p["max_level"].upper()]} if "max_level" in p else {}),
+        **({"max_level": levels[str(p["max_level"]).lower()]} if "max_level" in p else {}),
     )
     cameras = {name: CameraConfig(**c) for name, c in raw.get("cameras", {}).items()}
     dl = {k: _env(v) for k, v in raw.get("deliberation", {}).items()}
@@ -104,5 +112,7 @@ def load(path: str) -> Config:
         voice={k: _env(v) for k, v in raw.get("voice", {}).items()},
         deliberation=dl,
         operator={k: _env(v) for k, v in raw.get("operator", {}).items()},
+        webui={k: _env(v) for k, v in (raw.get("webui") or {}).items()},
+        desktop=dict(raw.get("desktop") or {}),
         frigate_url=raw.get("frigate_url"),
     )

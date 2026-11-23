@@ -80,6 +80,7 @@ class Engine:
         self._doorbell_ts: dict[str, float] = {}
         self._gates: dict[str, _Gate] = {}
         self._last_obs: dict[str, Observation] = {}
+        self.night_override: bool | None = None   # test mode: pretend it's night/day
 
     # ------------------------------------------------------------ inputs
 
@@ -108,7 +109,8 @@ class Engine:
 
     def handle(self, obs: Observation, presence: Presence, _tick: bool = False) -> list[Action]:
         hour = self.local_hour(obs.ts)
-        night = trust_mod._is_night(hour, self.cfg.trust.night_hours)
+        night = (self.night_override if self.night_override is not None
+                 else trust_mod._is_night(hour, self.cfg.trust.night_hours))
         rang = obs.ts - self._doorbell_ts.get(obs.camera, -1e18) <= 120
 
         state = self.tracker.update(obs, doorbell=rang)

@@ -20,5 +20,8 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["liveguard*"]
 
+[tool.setuptools.package-data]
+liveguard = ["demo.yaml", "web/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

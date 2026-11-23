@@ -61,6 +61,38 @@ camera speaker ◄─ go2rtc ◄─ /live/<cam>.wav ◄─ 24 kHz PCM
 
 Set `operator.backend: speaker` to skip Gemini entirely. It then repeats one-way lines, fully offline.
 
+## Web UI
+
+Open `http://<host>:8080` to use it. It has three tabs:
+
+- **Live**: who's on camera, how far up the ladder each person is, and why. Below that, a logbook of everything it noticed, decided and said, with *This was fine* / *Sketchy* buttons on notifications.
+- **Test bench**: only works in test mode (see below).
+- **Settings**: every option as a form, or the raw YAML. Saving checks that Liveguard can actually start with the new config before writing it, and keeps the previous version as `.bak`. Restart from the page to apply. Secrets are never sent back to the browser.
+
+Set `webui.password` before exposing the UI on your network. Your browser will ask for it, and any username works.
+
+## Test mode
+
+```sh
+pip install -e .
+liveguard --test -c ./liveguard.yaml     # writes a demo config if the file doesn't exist
+# open http://localhost:8080
+```
+
+No cameras, MQTT or Home Assistant needed. Your real zones, rules and deliberator run against scripted scenes:
+
+| Scene | What should happen |
+|---|---|
+| Prowler in the back yard | Thinks, decides to speak, warns, then starts a talk-down |
+| Package delivery | Stays quiet (at most a notification) |
+| Family coming home late | Silent: face match plus phone on Wi-Fi |
+| Someone waiting on the porch | Thinks, decides not to confront in daylight |
+| Watching from the sidewalk | Notification only, never speaks (off the property) |
+
+You can also move a person yourself (camera, zones, description, face match), and change the conditions: day or night, alarm armed, a phone joining Wi-Fi, the doorbell.
+
+In test mode, Home Assistant calls only show up in the logbook; nothing is sent. Spoken warnings play on your computer's speakers (Piper if configured, otherwise `say` or `espeak-ng`). With `operator.backend: gemini`, the live talk-down uses your mic and speakers in place of the camera's, so you can argue with it yourself. Use headphones: the mic is muted while it talks.
+
 ## Setup
 
 1. **Frigate**: enable face recognition and GenAI descriptions (for "you in the gray hoodie"). Draw zones:
@@ -70,11 +102,11 @@ Set `operator.backend: speaker` to skip Gemini entirely. It then repeats one-way
 2. **Home Assistant**: create a long-lived token. Add [`docs/home-assistant-feedback.yaml`](docs/home-assistant-feedback.yaml) as an automation so the notification buttons reach Liveguard.
 3. **Voice**: download a [Piper](https://github.com/rhasspy/piper) voice into `./models`. Your camera needs two-way audio through go2rtc. Set `codec` to match it (`pcma` for most Dahua/Amcrest/Reolink). For live talk-down, add a paid-tier `GEMINI_API_KEY` and point `operator.rtsp_url` at go2rtc's RTSP restream.
 4. **Deliberator (optional but recommended)**: run Ollama with a vision model, e.g. `ollama pull qwen2.5vl:7b`.
-5. Copy `config.example.yaml` to `config/liveguard.yaml`, edit it, then:
+5. Copy `config.example.yaml` to `config/liveguard.yaml` (or edit it later in the web UI), then:
 
 ```sh
 cp docker-compose.example.yaml docker-compose.yaml
-HA_TOKEN=... MQTT_PASSWORD=... GEMINI_API_KEY=... docker compose up -d
+HA_TOKEN=... MQTT_PASSWORD=... GEMINI_API_KEY=... LIVEGUARD_PASSWORD=... docker compose up -d
 ```
 
 While you're testing, set `policy.max_level: notify` (or `warn`) so it can't go further than that.
@@ -101,4 +133,5 @@ The core (`trust`, `intent`, `policy`, `engine`, `deliberate`) is pure Python wi
 - [ ] OpenAI Realtime / local speech-to-speech operator backends
 - [ ] Add confirmed visitors to Frigate's face library from the notification
 - [ ] Vehicle / plate trust (Frigate LPR)
+- [x] Web UI for settings, a live view and a test bench
 - [ ] HA dashboard card for the decision log
