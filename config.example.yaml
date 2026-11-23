@@ -71,6 +71,14 @@ cameras:
     lights: [light.backyard_flood]
     sirens: [siren.outdoor]
 
+operator:                   # live two-way talk-down (OPERATOR rung)
+  backend: gemini            # gemini | speaker (offline one-way lines) | log
+  api_key: ${GEMINI_API_KEY} # paid tier: free-tier audio may be used for training
+  model: gemini-3.8-live
+  voice: null                # e.g. Charon, Kore; null = Gemini default
+  rtsp_url: rtsp://frigate:8554/{stream}   # go2rtc restream, for the camera mic
+  max_session_s: 180         # hard cap per session (cost + Gemini's own limits)
+
 voice:
   go2rtc_url: http://frigate:1984
   piper_model: /models/en_US-lessac-medium.onnx

@@ -13,10 +13,12 @@ from datetime import datetime
 from . import config as config_mod
 from .adapters.frigate import FrigateParser, run_mqtt
 from .adapters.homeassistant import HAClient, HAPresenceTracker, poll_presence
+from .audio_server import AudioServer
 from .deliberate import OllamaDeliberator, RulesDeliberator, Verdict
 from .engine import Action, Engine
 from .feedback import FeedbackStore
 from .models import Level
+from .operator_gemini import GeminiLiveOperator
 from .trust import _is_night
 from .voice import Go2rtcSpeaker, LogOperator, LogSpeaker, SpeakerOperator, warning_line
 
@@ -46,17 +48,19 @@ class App:
         self.mqtt_client = None
 
         v = cfg.voice
-        if v.get("go2rtc_url") and v.get("piper_model") and v.get("public_url"):
-            sp = Go2rtcSpeaker(
+        self.audio = None
+        if v.get("go2rtc_url") and v.get("public_url"):
+            self.audio = AudioServer(v.get("out_dir", "/data/tts"), int(v.get("serve_port", 8099))).start()
+        streams = v.get("streams", {}) or {}
+        if self.audio and v.get("piper_model"):
+            self.speaker = Go2rtcSpeaker(
                 go2rtc_url=v["go2rtc_url"], piper_model=v["piper_model"], public_url=v["public_url"],
-                out_dir=v.get("out_dir", "/data/tts"), serve_port=int(v.get("serve_port", 8099)),
-                codec=v.get("codec", "pcma"), streams=v.get("streams", {}),
+                server=self.audio, codec=v.get("codec", "pcma"), streams=streams,
             )
-            sp.start_server()
-            self.speaker = sp
         else:
             log.warning("voice not configured: spoken lines will only be logged")
             self.speaker = LogSpeaker()
+
         dl = cfg.deliberation
         if dl.get("backend", "rules") == "ollama":
             self.deliberator = OllamaDeliberator(
@@ -64,8 +68,24 @@ class App:
                 frigate_url=cfg.frigate_url, timeout=float(dl.get("timeout_s", 10)))
         else:
             self.deliberator = RulesDeliberator()
-        # Real-time operator backends plug in here; offline fallback for now.
-        self.operator = SpeakerOperator(self.speaker) if v.get("operator") != "log" else LogOperator()
+
+        op = cfg.operator
+        backend = op.get("backend", "speaker")
+        if backend == "gemini" and self.audio and op.get("api_key"):
+            self.operator = GeminiLiveOperator(
+                api_key=op["api_key"], server=self.audio, go2rtc_url=v["go2rtc_url"],
+                public_url=v["public_url"], rtsp_url=op.get("rtsp_url", "rtsp://localhost:8554/{stream}"),
+                frigate_url=cfg.frigate_url, model=op.get("model", "gemini-3.8-live"),
+                voice=op.get("voice"), codec=v.get("codec", "pcma"), streams=streams,
+                max_session_s=float(op.get("max_session_s", 180)),
+            )
+        elif backend == "log":
+            self.operator = LogOperator()
+        else:
+            if backend == "gemini":
+                log.warning("gemini operator needs voice.go2rtc_url, voice.public_url and operator.api_key; "
+                            "falling back to one-way lines")
+            self.operator = SpeakerOperator(self.speaker)
 
     # ---------------------------------------------------------------- inputs
 

@@ -2,7 +2,7 @@
 
 An AI guard for [Frigate](https://frigate.video). It works out who belongs at your house, keeps quiet for family and deliveries, and thinks before it speaks. When someone really shouldn't be there, it talks to them through the camera speaker like a live monitoring operator.
 
-> **Status: early.** The decision engine is complete and covered by tests. The Frigate, Home Assistant, Piper and go2rtc adapters are written but haven't been run against real hardware yet. The live conversational operator currently falls back to repeated one-way lines; the real-time backend (Gemini Live / OpenAI Realtime) is the next step.
+> **Status: early.** The decision engine and the Gemini Live operator are covered by tests, using a fake Gemini session for the operator. The Frigate, Home Assistant, Piper, go2rtc and Gemini connections haven't been run against real hardware or the live API yet.
 
 ## How it decides
 
@@ -43,6 +43,24 @@ A face match alone at night is capped. A bad match on a dark porch is the classi
 
 Every decision and its reasons are published to `liveguard/decision` on MQTT, so you can always see why it spoke or stayed quiet.
 
+## Live talk-down (Gemini Live)
+
+At the operator rung, Liveguard opens a Gemini Live session for that camera:
+
+```
+camera mic ─(go2rtc RTSP → ffmpeg)─► 16 kHz PCM ──► Gemini Live
+Frigate latest.jpg every 3 s ─────────────────────►     │
+camera speaker ◄─ go2rtc ◄─ /live/<cam>.wav ◄─ 24 kHz PCM
+```
+
+- **Opened only when needed.** Gemini bills listening time, so there's no always-on session. A typical 1–2 minute talk-down costs a few cents.
+- **Half-duplex.** While the model's voice is playing, the camera mic is muted toward Gemini, because outdoor cameras hear their own speaker.
+- **Barge-in.** If the person talks over it, Gemini signals an interruption and the unplayed audio is dropped.
+- **Ends when:** they leave, they step off the property, it pages you, or `max_session_s` (default 3 min) runs out.
+- **Use the paid tier.** On the free tier, Google may use the audio and images to improve its products.
+
+Set `operator.backend: speaker` to skip Gemini entirely. It then repeats one-way lines, fully offline.
+
 ## Setup
 
 1. **Frigate**: enable face recognition and GenAI descriptions (for "you in the gray hoodie"). Draw zones:
@@ -50,13 +68,13 @@ Every decision and its reasons are published to `liveguard/decision` on MQTT, so
    - `street`, `sidewalk`, `neighbor_yard`: off-property areas.
    - `porch`, `backyard`, `side_yard`, `gate`, `driveway_cars`: detail zones.
 2. **Home Assistant**: create a long-lived token. Add [`docs/home-assistant-feedback.yaml`](docs/home-assistant-feedback.yaml) as an automation so the notification buttons reach Liveguard.
-3. **Voice**: download a [Piper](https://github.com/rhasspy/piper) voice into `./models`. Your camera needs two-way audio through go2rtc. Set `codec` to match it (`pcma` for most Dahua/Amcrest/Reolink).
+3. **Voice**: download a [Piper](https://github.com/rhasspy/piper) voice into `./models`. Your camera needs two-way audio through go2rtc. Set `codec` to match it (`pcma` for most Dahua/Amcrest/Reolink). For live talk-down, add a paid-tier `GEMINI_API_KEY` and point `operator.rtsp_url` at go2rtc's RTSP restream.
 4. **Deliberator (optional but recommended)**: run Ollama with a vision model, e.g. `ollama pull qwen2.5vl:7b`.
 5. Copy `config.example.yaml` to `config/liveguard.yaml`, edit it, then:
 
 ```sh
 cp docker-compose.example.yaml docker-compose.yaml
-HA_TOKEN=... MQTT_PASSWORD=... docker compose up -d
+HA_TOKEN=... MQTT_PASSWORD=... GEMINI_API_KEY=... docker compose up -d
 ```
 
 While you're testing, set `policy.max_level: notify` (or `warn`) so it can't go further than that.
@@ -79,7 +97,8 @@ The core (`trust`, `intent`, `policy`, `engine`, `deliberate`) is pure Python wi
 
 ## Roadmap
 
-- [ ] Real-time operator backend (Gemini Live, paid tier; OpenAI Realtime; local speech-to-speech)
+- [x] Gemini Live operator
+- [ ] OpenAI Realtime / local speech-to-speech operator backends
 - [ ] Add confirmed visitors to Frigate's face library from the notification
 - [ ] Vehicle / plate trust (Frigate LPR)
 - [ ] HA dashboard card for the decision log

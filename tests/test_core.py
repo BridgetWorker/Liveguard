@@ -415,3 +415,4 @@ def test_example_config_loads(monkeypatch):
     assert cfg.engine.policy.max_level is Level.ESCALATE_HUMAN
     assert cfg.engine.camera_areas["backyard"] == "in the back yard"
     assert cfg.deliberation["backend"] == "ollama"
+    assert cfg.operator["backend"] == "gemini" and cfg.operator["model"] == "gemini-3.8-live"

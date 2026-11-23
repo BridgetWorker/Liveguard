@@ -34,6 +34,7 @@ class Config:
     cameras: dict[str, CameraConfig]
     voice: dict
     deliberation: dict = field(default_factory=dict)
+    operator: dict = field(default_factory=dict)
     frigate_url: str | None = None        # snapshots for the deliberator
 
 
@@ -102,5 +103,6 @@ def load(path: str) -> Config:
         cameras=cameras,
         voice={k: _env(v) for k, v in raw.get("voice", {}).items()},
         deliberation=dl,
+        operator={k: _env(v) for k, v in raw.get("operator", {}).items()},
         frigate_url=raw.get("frigate_url"),
     )

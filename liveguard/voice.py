@@ -8,19 +8,18 @@ Two separate jobs:
 """
 from __future__ import annotations
 
-import functools
-import http.server
 import logging
 import re
 import subprocess
-import threading
 import time
-import urllib.parse
-import urllib.request
 import uuid
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+from .audio_server import go2rtc_play
+
+if TYPE_CHECKING:
+    from .audio_server import AudioServer
 
 log = logging.getLogger("liveguard.voice")
 
@@ -119,7 +118,7 @@ class LogOperator:
 
 @dataclass
 class Go2rtcSpeaker:
-    """Render with Piper, serve the WAV over HTTP, tell go2rtc to play it into the camera.
+    """Render with Piper, serve the WAV from the AudioServer, tell go2rtc to play it.
 
     go2rtc fetches the file itself, so `public_url` must be reachable *from go2rtc*.
     `codec` must match the camera's backchannel: pcma for most Dahua/Amcrest/Reolink,
@@ -128,25 +127,17 @@ class Go2rtcSpeaker:
     go2rtc_url: str
     piper_model: str
     public_url: str
-    out_dir: str = "/data/tts"
-    serve_port: int = 8099
+    server: "AudioServer"
     codec: str = "pcma"
     piper_bin: str = "piper"
     # camera name in Frigate -> go2rtc stream name (if different)
     streams: dict[str, str] = field(default_factory=dict)
     min_gap_s: float = 8.0
     _last: dict[str, float] = field(default_factory=dict)
-    _server: http.server.ThreadingHTTPServer | None = None
-
-    def start_server(self) -> None:
-        Path(self.out_dir).mkdir(parents=True, exist_ok=True)
-        handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=self.out_dir)
-        self._server = http.server.ThreadingHTTPServer(("0.0.0.0", self.serve_port), handler)
-        threading.Thread(target=self._server.serve_forever, daemon=True).start()
 
     def _render(self, text: str) -> str:
         name = f"{uuid.uuid4().hex}.wav"
-        out = Path(self.out_dir) / name
+        out = self.server.out_dir / name
         subprocess.run([self.piper_bin, "--model", self.piper_model, "--output_file", str(out)],
                        input=text.encode(), check=True, timeout=30)
         self._prune()
@@ -154,7 +145,7 @@ class Go2rtcSpeaker:
 
     def _prune(self, keep_s: float = 3600) -> None:
         cutoff = time.time() - keep_s
-        for f in Path(self.out_dir).glob("*.wav"):
+        for f in self.server.out_dir.glob("*.wav"):
             if f.stat().st_mtime < cutoff:
                 f.unlink(missing_ok=True)
 
@@ -162,12 +153,12 @@ class Go2rtcSpeaker:
         now = time.time()
         if now - self._last.get(camera, 0) < self.min_gap_s:
             return  # don't talk over ourselves
+        if self.server.relay.is_open(camera):
+            return  # a live session owns the speaker
         self._last[camera] = now
         name = self._render(text)
-        src = f"ffmpeg:{self.public_url.rstrip('/')}/{name}#audio={self.codec}#input=file"
-        q = urllib.parse.urlencode({"dst": self.streams.get(camera, camera), "src": src})
-        req = urllib.request.Request(f"{self.go2rtc_url.rstrip('/')}/api/streams?{q}", method="POST")
-        urllib.request.urlopen(req, timeout=10).read()
+        go2rtc_play(self.go2rtc_url, self.streams.get(camera, camera),
+                    f"{self.public_url.rstrip('/')}/tts/{name}", self.codec, file=True)
 
 
 @dataclass
