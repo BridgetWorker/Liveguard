@@ -1,0 +1,87 @@
+# Liveguard example config. Copy to /config/liveguard.yaml and edit.
+timezone: America/Chicago
+
+household:
+  # Names exactly as they appear in Frigate's face library
+  family: [scarlett, mom]
+  trusted: [dog_walker]            # friends/sitters: never confronted, still logged
+  # Frigate face name -> household name used by the presence trackers below
+  face_to_person:
+    scarlett: scarlett
+    mom: mom
+  night_hours: [22, 6]
+
+zones:
+  # Recommended: draw one big "property" zone along your lot line in Frigate.
+  # With on_property set, nobody outside it is ever spoken to or lit up.
+  on_property: [property]
+  off_property: [street, sidewalk, neighbor_yard]
+  door: [porch, front_door]
+  sensitive: [side_yard, backyard, gate, driveway_cars]
+
+intent:
+  delivery_max_s: 120
+  loiter_s: 90
+  loiter_stationary_s: 45
+
+policy:
+  step_s: 15                 # minimum seconds between rungs
+  operator_max_s: 60         # talk-down this long without them leaving -> page you
+  notify_deliveries: true
+  siren_requires_armed: true
+  max_level: escalate_human  # cap the ladder, e.g. "warn" while testing
+
+deliberation:
+  backend: ollama            # ollama | rules
+  url: http://ollama:11434
+  model: qwen2.5vl:7b        # any Ollama vision model
+  timeout_s: 10
+  on_timeout: hold           # hold (stay quiet) | rules
+
+frigate_url: http://frigate:5000
+
+mqtt:
+  host: mqtt
+  port: 1883
+  username: liveguard
+  password: ${MQTT_PASSWORD}
+
+home_assistant:
+  url: http://homeassistant:8123
+  token: ${HA_TOKEN}         # long-lived access token
+  notify_service: notify.mobile_app_scarletts_phone
+  entities:
+    wifi_trackers:           # router / UniFi / companion-app trackers
+      device_tracker.scarlett_phone: scarlett
+      device_tracker.mom_phone: mom
+    ble_trackers:            # ESPresense / Bermuda
+      sensor.scarlett_phone_ble: scarlett
+    alarm_panel: alarm_control_panel.alarmo
+    interior_doors: [binary_sensor.front_door_contact]
+    doorbells:
+      binary_sensor.doorbell_button: front_door
+
+cameras:
+  front_door:
+    area: on the front porch     # spoken as written
+    lights: [light.porch]
+    sirens: []
+  backyard:
+    area: in the back yard
+    lights: [light.backyard_flood]
+    sirens: [siren.outdoor]
+
+operator:                   # live two-way talk-down (OPERATOR rung)
+  backend: gemini            # gemini | speaker (offline one-way lines) | log
+  api_key: ${GEMINI_API_KEY} # paid tier: free-tier audio may be used for training
+  model: gemini-3.8-live
+  voice: null                # e.g. Charon, Kore; null = Gemini default
+  rtsp_url: rtsp://frigate:8554/{stream}   # go2rtc restream, for the camera mic
+  max_session_s: 180         # hard cap per session (cost + Gemini's own limits)
+
+voice:
+  go2rtc_url: http://frigate:1984
+  piper_model: /models/en_US-lessac-medium.onnx
+  public_url: http://liveguard:8099   # must be reachable from go2rtc
+  codec: pcma                         # match your camera's backchannel
+  streams: {}                         # frigate camera -> go2rtc stream, if names differ
