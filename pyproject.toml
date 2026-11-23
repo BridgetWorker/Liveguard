@@ -1,0 +1,23 @@
+[project]
+name = "liveguard"
+version = "0.1.0"
+description = "AI guard for Frigate: knows who belongs, thinks before speaking, talks down intruders"
+requires-python = ">=3.11"
+dependencies = ["paho-mqtt>=2.0", "pyyaml>=6.0"]
+
+[project.optional-dependencies]
+voice = ["piper-tts>=1.2"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+liveguard = "liveguard.app:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["liveguard*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

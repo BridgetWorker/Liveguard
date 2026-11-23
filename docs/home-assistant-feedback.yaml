@@ -1,0 +1,15 @@
+# Home Assistant automation: forward "This was fine" / "Sketchy" taps on
+# Liveguard notifications to Liveguard over MQTT, so it can learn.
+alias: Liveguard feedback
+triggers:
+  - trigger: event
+    event_type: mobile_app_notification_action
+conditions:
+  - condition: template
+    value_template: "{{ trigger.event.data.action.startswith('LIVEGUARD_') }}"
+actions:
+  - action: mqtt.publish
+    data:
+      topic: liveguard/feedback
+      payload: '{"action": "{{ trigger.event.data.action }}"}'
+mode: queued
